@@ -1,0 +1,87 @@
+---
+title: "Human Activity recognition Machine learning assignment"
+author: "Santosh Pradhan"
+date: "May 20, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+```
+## Overview
+We will employ a suitable Machine Learning algorithm to do Human Activity Recognition. In this exercise we will figure out how well a person is weight lifting, classifying it into one of the five categories. Data is collected from various wearable sensors put in various parts of the body as well as the dumbbell. We will train our model with Weight Lifting Exercise Dataset at http://groupware.les.inf.puc-rio.br/har  
+
+## Loading Data
+Firstly we download and load data into R 
+```{r load_csv}
+train_file <- "train.csv"
+test_file <- "test.csv" 
+train_url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+if (!file.exists(train_file)){
+    download.file(train_url,destfile = train_file)    
+}
+
+test_url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+if (!file.exists(test_file)){
+    download.file(test_url,destfile = test_file)  
+}
+
+trainfull <- read.csv("train.csv",na.strings = c("#DIV/0!","NA"))
+test <- read.csv("test.csv",na.strings = c("#DIV/0!","NA"))
+```
+
+## Partitioning Train data
+Then we carve out training and validation partitions from the training set. 
+```{r partition}
+set.seed(3923)
+inTrain <- createDataPartition(y=trainfull$classe, p=0.6, list=F)
+training <- trainfull[inTrain, ]
+validation <- trainfull[-inTrain, ]
+```
+
+
+## Exploraratory analysis  
+We can see that there are 160 variables many of them are almost always null and some dont show any variability.
+```{r exploraratory, results='hide'}
+nullvals <- colSums(is.na(training))
+#names(nullvals)
+zeroVarVals <- nearZeroVar(training, names = TRUE)
+```
+
+## Cleanup
+We remove all such variables and additionally. Variables like user_name (specific subject), raw_timestamps(when readings were taken) and X (sequence no.) should not influence results so they are removed as well.   
+```{r cleanup}
+
+colsToRemove <- c('X', 'user_name',"raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp")
+colsToRemove <- c(names(training[, colSums(is.na(training))>0]), colsToRemove)
+
+colsToRemove <- c(zeroVarVals, colsToRemove)
+colsToKeep <- setdiff(names(training), colsToRemove)
+
+training= subset(training, select = colsToKeep)
+validation = subset(validation, select= colsToKeep)
+```
+
+#Model Building
+Since this is a classification problem, we will try using Random Forest which has high accuracy. With the volume of data we have, it takes significant amount of time to train the model so we cache it.
+```{r model1, cache=TRUE}
+set.seed(1286)
+model_rf <- train(classe~., data = training, method = "rf", trContol=trainControl(method="cv", number=5, allowParallel=T))
+```
+
+#Model Evaluation
+```{r evalmodel, message=FALSE, warning=FALSE}
+validation_prediction <- predict(model_rf, newdata=validation)
+
+confusionMatrix(validation_prediction, validation$classe)
+```
+This shows excellent accuracy of over 99% in the test set so decide to keep to this model.
+
+#Prediction on quiz test set
+Finally predict quiz test set using our model.
+```{r quiz_predection}
+predict(model_rf, newdata=test)
+
+```
+
